@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://industrial_ai:industrial_ai@localhost:5432/industrial_ai"
     )
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["*"]
 
     rag_embedding_provider: str = "fake"
     local_embedding_model: str = "intfloat/multilingual-e5-small"
