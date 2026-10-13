@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 import math
 from typing import Any, Protocol
 
@@ -31,6 +31,10 @@ class VectorStoreQuery(BaseModel):
     query: str
     embedding: list[float] | None = None
     top_k: int = Field(default=5, ge=1, le=20)
+
+    record_types: list[str] | None = None
+    machine_id: str | None = None
+    error_codes: list[str] | None = None
 
 
 class VectorStoreSearchResult(BaseModel):
@@ -75,7 +79,9 @@ class InMemoryVectorStore:
 
     async def search(self, query: VectorStoreQuery) -> list[VectorStoreSearchResult]:
         if query.embedding is None:
-            raise ValueError("VectorStoreQuery.embedding is required for vector search.")
+            raise ValueError(
+                "VectorStoreQuery.embedding is required for vector search."
+            )
 
         scored_records: list[tuple[float, VectorStoreRecord]] = []
 
@@ -83,8 +89,24 @@ class InMemoryVectorStore:
             if record.embedding is None:
                 continue
 
-            score = cosine_similarity(query.embedding, record.embedding)
-            scored_records.append((score, record))
+            if not record_matches_filters(record, query):
+                continue
+
+            semantic_score = cosine_similarity(query.embedding, record.embedding)
+            boost = exact_identifier_boost(query.query, record)
+            final_score = min(semantic_score + boost, 1.0)
+
+            record_with_score_metadata = record.model_copy(
+                update={
+                    "metadata": {
+                        **record.metadata,
+                        "semantic_score": semantic_score,
+                        "rerank_boost": boost,
+                    }
+                }
+            )
+
+            scored_records.append((final_score, record_with_score_metadata))
 
         scored_records.sort(key=lambda item: item[0], reverse=True)
 
@@ -137,3 +159,78 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
         return 0.0
 
     return dot_product / (norm_a * norm_b)
+
+
+ERROR_CODE_PATTERN = re.compile(r"\b[A-Z]{2,5}-\d{2,5}\b", re.IGNORECASE)
+
+
+def extract_error_codes(text: str) -> list[str]:
+    return [match.group(0).upper() for match in ERROR_CODE_PATTERN.finditer(text)]
+
+
+def exact_identifier_boost(query_text: str, record: VectorStoreRecord) -> float:
+    query_codes = extract_error_codes(query_text)
+
+    if not query_codes:
+        return 0.0
+
+    metadata_error_code = str(record.metadata.get("error_code", "")).upper()
+    metadata_error_codes = str(record.metadata.get("error_codes", "")).upper()
+
+    haystack = "\n".join(
+        [
+            record.chunk_id,
+            record.document_id,
+            record.content,
+            str(record.metadata.get("document_title", "")),
+            metadata_error_code,
+            metadata_error_codes,
+        ]
+    ).upper()
+
+    boost = 0.0
+
+    for code in query_codes:
+        if metadata_error_code == code:
+            boost = max(boost, 0.35)
+        elif code in metadata_error_codes:
+            boost = max(boost, 0.28)
+        elif code in haystack:
+            boost = max(boost, 0.20)
+
+    return boost
+
+
+def record_matches_filters(
+    record: VectorStoreRecord,
+    query: VectorStoreQuery,
+) -> bool:
+    metadata = record.metadata
+
+    if query.record_types:
+        record_type = str(metadata.get("record_type", ""))
+        if record_type not in query.record_types:
+            return False
+
+    if query.machine_id:
+        record_machine_id = str(metadata.get("machine_id", ""))
+        if record_machine_id != query.machine_id:
+            return False
+
+    if query.error_codes:
+        requested_codes = {code.upper() for code in query.error_codes}
+
+        record_error_code = str(metadata.get("error_code", "")).upper()
+        record_error_codes = str(metadata.get("error_codes", "")).upper()
+
+        haystack_codes = {record_error_code}
+        haystack_codes.update(
+            code.strip().upper()
+            for code in record_error_codes.split(",")
+            if code.strip()
+        )
+
+        if not requested_codes.intersection(haystack_codes):
+            return False
+
+    return True

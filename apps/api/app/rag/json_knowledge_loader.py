@@ -139,6 +139,9 @@ Status: {item.get("status", "")}
                     "case_id": case_id,
                     "machine_id": str(item.get("machine_id", "")),
                     "severity": str(item.get("severity", "")),
+                    "error_codes": ",".join(
+                        str(code).upper() for code in item.get("error_codes", [])
+                    ),
                     "file_name": path.name,
                 },
             )

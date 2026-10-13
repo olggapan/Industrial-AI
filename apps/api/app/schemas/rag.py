@@ -7,6 +7,9 @@ class RagSearchRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
     min_score: float | None = Field(default=0.80, ge=-1.0, le=1.0)
+    record_types: list[str] | None = None
+    machine_id: str | None = None
+    error_codes: list[str] | None = None
 
 
 class RagSearchResult(BaseModel):

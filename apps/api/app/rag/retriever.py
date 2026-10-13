@@ -4,7 +4,12 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.rag.embeddings import EmbeddingInput, EmbeddingProvider
-from app.rag.schemas import EmbeddedChunk, RetrievedChunk, RetrievalQuery, RetrievalResult
+from app.rag.schemas import (
+    EmbeddedChunk,
+    RetrievedChunk,
+    RetrievalQuery,
+    RetrievalResult,
+)
 from app.rag.vector_store import (
     VectorStore,
     VectorStoreQuery,
@@ -64,6 +69,9 @@ class VectorRagRetriever:
                 query=query.query,
                 embedding=query_embedding,
                 top_k=query.top_k,
+                record_types=query.record_types,
+                machine_id=query.machine_id,
+                error_codes=query.error_codes,
             )
         )
 
@@ -115,7 +123,9 @@ def vector_store_result_to_retrieved_chunk(
 
 class PlaceholderRagRetriever:
     async def index_chunks(self, chunks: Sequence[EmbeddedChunk]) -> None:
-        raise NotImplementedError("Manual RAG retriever indexing is not implemented yet.")
+        raise NotImplementedError(
+            "Manual RAG retriever indexing is not implemented yet."
+        )
 
     async def retrieve(self, query: RetrievalQuery) -> RetrievalResult:
         raise NotImplementedError("Manual RAG retrieval is not implemented yet.")

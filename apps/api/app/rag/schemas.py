@@ -91,6 +91,10 @@ class RetrievalQuery(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)
 
+    record_types: list[str] | None = None
+    machine_id: str | None = None
+    error_codes: list[str] | None = None
+
 
 class RetrievalResult(BaseModel):
     """
